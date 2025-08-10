@@ -1,7 +1,7 @@
 import os
 import tempfile
 import streamlit as st
-from gtts import gTTS  # or your TTS library
+from gtts import gTTS 
 
 def synthesize_voice(text, lang="en"):
     """Generate TTS audio file and return file path."""
