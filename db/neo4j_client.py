@@ -1,91 +1,67 @@
-from neo4j import GraphDatabase
-import os
+from neo4j import GraphDatabase, Driver
 from dotenv import load_dotenv
-import logging
+import os
 
-load_dotenv()
+load_dotenv()  # Load credentials from .env
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+NEO4J_URI="neo4j+ssc://99ac5f56.databases.neo4j.io"
+NEO4J_USER="neo4j"
+NEO4J_PASSWORD="2OOPeeZBMU_ZcaJSB7iyRSvcvuRo1rENZG1mZLtxgxY"
+NEO4J_DATABASE="neo4j"
 
-NEO4J_URI = os.getenv("NEO4J_URI")
-NEO4J_USER = os.getenv("NEO4J_USER")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+driver: Driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
-def get_driver():
-    """Get Neo4j driver with error handling"""
-    try:
-        # Check if environment variables are set
-        if not NEO4J_URI:
-            raise ValueError("NEO4J_URI environment variable is not set. Please set it in your .env file or environment variables.")
-        if not NEO4J_USER:
-            raise ValueError("NEO4J_USER environment variable is not set. Please set it in your .env file or environment variables.")
-        if not NEO4J_PASSWORD:
-            raise ValueError("NEO4J_PASSWORD environment variable is not set. Please set it in your .env file or environment variables.")
-        
-        # Debug logging
-        logger.info(f"Connecting to Neo4j with URI: {NEO4J_URI}")
-        logger.info(f"Username: {NEO4J_USER}")
-        
-        driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-        # Test the connection
-        with driver.session() as session:
-            session.run("RETURN 1")
-        return driver
-    except Exception as e:
-        logger.error(f"Failed to connect to Neo4j: {e}")
-        raise
 
-def store_product(title, price, star_rating, store_name):
-    """Store a product in Neo4j with error handling"""
-    try:
-        driver = get_driver()
-        query = """
-        MERGE (p:Product {title: $title})
-        SET p.price = $price,
-            p.star_rating = $star_rating,
-            p.store = $store_name,
-            p.created_at = datetime()
-        """
-        with driver.session() as session:
-            session.run(query, title=title, price=price, star_rating=star_rating, store_name=store_name)
-        logger.info(f"Successfully stored product: {title}")
-    except Exception as e:
-        logger.error(f"Failed to store product {title}: {e}")
-        raise
-    finally:
-        if 'driver' in locals():
-            driver.close()
+def save_product_to_neo4j(product: dict):
+    """Insert or update a product node in the Neo4j graph."""
+    query = """
+    MERGE (p:Product {name: $name})
+    SET p += {
+        brand: $brand,
+        price: $price,
+        discount: $discount,
+        availability: $availability,
+        rating: $rating,
+        review_count: $review_count,
+        url: $url,
+        category: $category
+    }
+    """
+    params = {
+        "name": product["Product Name"],
+        "brand": product.get("Brand", ""),
+        "price": product.get("Price", ""),
+        "discount": product.get("Discount", ""),
+        "availability": product.get("Availability", ""),
+        "rating": product.get("Rating", ""),
+        "review_count": product.get("Review Count", ""),
+        "url": product.get("Product URL", ""),
+        "category": product.get("Category", "")
+    }
 
-def run_cypher_query(query):
-    """Run a Cypher query with error handling"""
-    try:
-        driver = get_driver()
-        with driver.session() as session:
-            result = session.run(query)
-            return [record.data() for record in result]
-    except Exception as e:
-        logger.error(f"Failed to run Cypher query: {e}")
-        raise
-    finally:
-        if 'driver' in locals():
-            driver.close()
+    with driver.session(database=NEO4J_DATABASE) as session:
+        session.run(query, params)
 
-def initialize_database():
-    """Initialize the database with constraints and indexes"""
-    try:
-        driver = get_driver()
-        with driver.session() as session:
-            # Create constraints
-            session.run("CREATE CONSTRAINT product_title IF NOT EXISTS FOR (p:Product) REQUIRE p.title IS UNIQUE")
-            # Create indexes for better performance
-            session.run("CREATE INDEX product_store IF NOT EXISTS FOR (p:Product) ON (p.store)")
-            session.run("CREATE INDEX product_price IF NOT EXISTS FOR (p:Product) ON (p.price)")
-        logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise
-    finally:
-        if 'driver' in locals():
-            driver.close()
+
+def run_query(cypher_query: str, parameters: dict = None):
+    """Run a Cypher query and return the results as a list of dictionaries."""
+    with driver.session(database=NEO4J_DATABASE) as session:
+        result = session.run(cypher_query, parameters or {})
+        return [record.data() for record in result]
+
+
+# Optional: for testing
+if __name__ == "__main__":
+    product = {
+        "Product Name": "Example Product",
+        "Brand": "BrandX",
+        "Price": "100",
+        "Discount": "10%",
+        "Availability": "In Stock",
+        "Rating": "4.5",
+        "Review Count": "100",
+        "Product URL": "http://example.com",
+        "Category": "CategoryX"
+    }
+    save_product_to_neo4j(product)
+    print("✅ Product saved.")

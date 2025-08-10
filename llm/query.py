@@ -1,81 +1,95 @@
 import os
-from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate
-from langchain_core.runnables import RunnablePassthrough
+import openai
 from dotenv import load_dotenv
 
 load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-llm = ChatOpenAI(model_name="gpt-4o", temperature=0, openai_api_key="your_openai_api_key_here")
+def load_prompt_template():
+    with open("prompt_template.txt", "r") as f:
+        return f.read()
 
-prompt_template = PromptTemplate.from_template("""
-OBJECTIVE:  
-Serve as a Neo4j Cypher expert. Your task is to translate natural language queries from users into accurate and efficient Cypher queries that retrieve information from the Neo4j database, specifically focusing on the `Product` nodes.
+def generate_cypher_query(user_question):
+    prompt = load_prompt_template()
 
-BEHAVIORAL RULES:
-- Always respond in a concise and professional manner.
-- Focus only on converting the query into Cypher without engaging in casual conversation.
-- Prioritize correctness, efficiency, and clarity in the generated Cypher.
-- Do not assume data beyond what is explicitly stated in the user query.
-- If the user query is vague or missing essential context, you may generate a reasonable assumption but keep it minimal and safe.
+    # ✅ FULL GRAPH SCHEMA (ESCAPED CURLY BRACES FOR .format() SAFETY)
+    graph_schema = """
+Nodes:
+  (:Part {{name}})
+  (:BikeModel {{name}})
+  (:BikeType {{name}})
 
-MEMORY AWARENESS:
-- You do not have memory of past interactions or database state.
-- Treat every query as independent unless explicit context is provided within the input.
+Relationships:
+  (:Part)-[:USED_IN {{{{quantity, price}}}}]->(:BikeModel)
+  (:BikeModel)-[:IS_A]->(:BikeType)
 
-DATA TYPES TO PROCESS:
-- User's natural language question (English)
-- All output must be a valid Cypher query compatible with Neo4j
-- Focus only on the `Product` nodes and their relationships, labels, and properties
+Example Data:
+MERGE (p:Part {{{{name: 'Engine Assembly'}}}})
+MERGE (m:BikeModel {{{{name: 'Classic 350'}}}})
+MERGE (t:BikeType {{{{name: 'Cruiser'}}}})
+MERGE (p)-[:USED_IN {{{{quantity: 1, price: 32412.0}}}}]->(m)
+MERGE (m)-[:IS_A]->(t)
 
-CONVERSATION RESPONSE MODES:
-- Only output Cypher with no additional explanation unless specifically asked for.
-- If a question is ambiguous, include basic assumptions as code comments in the Cypher.
+MERGE (p:Part {{{{name: 'Clutch Plate'}}}})
+MERGE (m:BikeModel {{{{name: 'Classic 350'}}}})
+MERGE (t:BikeType {{{{name: 'Cruiser'}}}})
+MERGE (p)-[:USED_IN {{{{quantity: 3, price: 833.0}}}}]->(m)
+MERGE (m)-[:IS_A]->(t)
 
-ACTION TYPES:
-- Cypher query generation for read operations (MATCH, WHERE, RETURN)
-- Property filtering and sorting
-- Relationship traversal if mentioned in the query
+MERGE (p:Part {{{{name: 'Brake Pads'}}}})
+MERGE (m:BikeModel {{{{name: 'Bullet 350'}}}})
+MERGE (t:BikeType {{{{name: 'Standard'}}}})
+MERGE (p)-[:USED_IN {{{{quantity: 3, price: 1290.0}}}}]->(m)
+MERGE (m)-[:IS_A]->(t)
 
-ACTION OUTPUT HANDLING:
-Always output the final Cypher query in the following format:
-User Query: {question}
-Cypher:
-<MATCH ... RETURN ...>
-- Do not wrap the query in code fences unless asked.
-- Do not include explanations or metadata unless prompted explicitly.
+MERGE (p:Part {{{{name: 'Chain Sprocket Kit'}}}})
+MERGE (m:BikeModel {{{{name: 'Hunter 350'}}}})
+MERGE (t:BikeType {{{{name: 'Roadster'}}}})
+MERGE (p)-[:USED_IN {{{{quantity: 3, price: 2614.0}}}}]->(m)
+MERGE (m)-[:IS_A]->(t)
 
-SYSTEM GUIDELINES:
-- Use correct Cypher syntax (Neo4j 4.x+ compatible)
-- Use meaningful aliases for nodes (e.g., `p` for Product)
-- Use `MATCH` or `OPTIONAL MATCH` as needed
-- Use `WHERE`, `ORDER BY`, `LIMIT` clauses only if user query implies them
-- If filtering by property, wrap string values in quotes and use correct types
+MERGE (p:Part {{{{name: 'Front Suspension'}}}})
+MERGE (m:BikeModel {{{{name: 'Meteor 350'}}}})
+MERGE (t:BikeType {{{{name: 'Cruiser'}}}})
+MERGE (p)-[:USED_IN {{{{quantity: 2, price: 4020.0}}}}]->(m)
+MERGE (m)-[:IS_A]->(t)
 
-MANDATORY RULES:
-- Never hallucinate node labels or properties not part of the `Product` schema
-- Do not generate queries involving other node labels unless explicitly mentioned
-- Avoid returning entire nodes with `RETURN *`; always specify fields
-- Ensure all Cypher statements are syntactically valid
+MERGE (p:Part {{{{name: 'Rear Suspension'}}}})
+MERGE (m:BikeModel {{{{name: 'Meteor 350'}}}})
+MERGE (t:BikeType {{{{name: 'Cruiser'}}}})
+MERGE (p)-[:USED_IN {{{{quantity: 2, price: 3780.0}}}}]->(m)
+MERGE (m)-[:IS_A]->(t)
 
-SAMPLE FLOW:
-User Query: Show me all products that are priced above 500  
-Cypher:
-MATCH (p:Product)
-WHERE p.price > 500
-RETURN p.name, p.price
+MERGE (p:Part {{{{name: 'Silencer'}}}})
+MERGE (m:BikeModel {{{{name: 'Classic 350'}}}})
+MERGE (t:BikeType {{{{name: 'Cruiser'}}}})
+MERGE (p)-[:USED_IN {{{{quantity: 1, price: 4560.0}}}}]->(m)
+MERGE (m)-[:IS_A]->(t)
 
-User Query: List names and categories of all available products  
-Cypher:
-MATCH (p:Product)
-WHERE p.available = true
-RETURN p.name, p.category
+MERGE (p:Part {{{{name: 'Handlebar'}}}})
+MERGE (m:BikeModel {{{{name: 'Hunter 350'}}}})
+MERGE (t:BikeType {{{{name: 'Roadster'}}}})
+MERGE (p)-[:USED_IN {{{{quantity: 1, price: 870.0}}}}]->(m)
+MERGE (m)-[:IS_A]->(t)
 
-REMEMBER:
-Your sole job is to convert a user’s request into an accurate Cypher query focused on the `Product` node. Keep responses clean, minimal, and executable. Never provide explanations unless asked.
-""")
-# Use the new RunnableSequence instead of LLMChain
-chain = prompt_template | llm
+MERGE (p:Part {{{{name: 'Headlight'}}}})
+MERGE (m:BikeModel {{{{name: 'Bullet 350'}}}})
+MERGE (t:BikeType {{{{name: 'Standard'}}}})
+MERGE (p)-[:USED_IN {{{{quantity: 1, price: 1450.0}}}}]->(m)
+MERGE (m)-[:IS_A]->(t)
 
-def generate_cypher_query(question):
-    return chain.invoke({"question": question})
+MERGE (p:Part {{{{name: 'Fuel Tank'}}}})
+MERGE (m:BikeModel {{{{name: 'Meteor 350'}}}})
+MERGE (t:BikeType {{{{name: 'Cruiser'}}}})
+MERGE (p)-[:USED_IN {{{{quantity: 1, price: 5290.0}}}}]->(m)
+MERGE (m)-[:IS_A]->(t)
+""".strip()
+
+    formatted_prompt = prompt.replace("<GRAPH_SCHEMA>", graph_schema).format(question=user_question)
+
+    response = openai.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": formatted_prompt}],
+        temperature=0.2
+    )
+    return response.choices[0].message.content.strip()
